@@ -1,0 +1,36 @@
+name: Run AVDBS t20 Bot
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # 6시간마다 실행
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium
+
+      - name: Run bot
+        env:
+          AVDBS_USERNAME: ${{ secrets.AVDBS_USERNAME }}
+          AVDBS_PASSWORD: ${{ secrets.AVDBS_PASSWORD }}
+          USER_AGENT: ${{ secrets.USER_AGENT }}
+          BOARD_URL: ${{ secrets.BOARD_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MAX_PAGES: ${{ secrets.MAX_PAGES }}
+          REQUEST_DELAY: ${{ secrets.REQUEST_DELAY }}
+          HEADLESS: ${{ secrets.HEADLESS }}
+        run: |
+          python scripts/bot_t20.py
