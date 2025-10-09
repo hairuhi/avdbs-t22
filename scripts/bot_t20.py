@@ -6,7 +6,7 @@ from tqdm import tqdm
 from playwright.sync_api import sync_playwright
 from telegram import Bot, InputMediaPhoto
 from telegram.constants import ParseMode
-from selectors import SELECTORS as S
+from avdbs_selectors import SELECTORS as S
 
 # 환경변수 (GitHub Secrets로 제공)
 BASE = "https://www.avdbs.com"
