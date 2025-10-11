@@ -1,0 +1,39 @@
+name: crawl-avdbs
+on:
+  schedule: [{ cron: "*/5 * * * *" }]
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: avdbs-state-${{ github.run_id }}
+          restore-keys: avdbs-state-
+      - name: Ensure auth
+        env:
+          AVDBS_ID: ${{ secrets.AVDBS_ID }}
+          AVDBS_PW: ${{ secrets.AVDBS_PW }}
+          COOKIE_ENC_KEY: ${{ secrets.COOKIE_ENC_KEY }}
+        run: |
+          python login_avdbs.py || true
+      - name: Crawl & send
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COOKIE_ENC_KEY: ${{ secrets.COOKIE_ENC_KEY }}
+          EXCLUDE_IMAGE_SUBSTRINGS: "icon_link.gif,loading_img.jpg"
+          PANIC_STOP: "0"
+        run: python main_avdbs.py
+      - name: Save state
+        uses: actions/upload-artifact@v4
+        with:
+          name: state
+          path: state
