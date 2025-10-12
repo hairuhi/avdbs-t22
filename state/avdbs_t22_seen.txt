@@ -69,3 +69,6 @@ avdbs:t22:/board/1040690
 avdbs:t22:/board/1270470?reply=3554141
 avdbs:t22:/board/1269935?reply=3554143
 avdbs:t22:/board/1270470?reply=3554230
+avdbs:t22:/board/1270459?reply=3554252
+avdbs:t22:/board/1269914?reply=3554253
+avdbs:t22:/board/1250874?reply=3554259
