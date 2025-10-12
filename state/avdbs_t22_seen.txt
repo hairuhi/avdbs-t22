@@ -90,3 +90,4 @@ avdbs:t22:/board/1231104
 avdbs:t22:/board/1230999
 avdbs:t22:/board/1229671
 avdbs:t22:/board/1225184
+avdbs:t22:/board/1270774?reply=3554611
