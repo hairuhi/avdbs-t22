@@ -1,39 +1,80 @@
-name: crawl-avdbs
+name: AVDBS t22 Bot
+
 on:
-  schedule: [{ cron: "*/5 * * * *" }]
+  schedule:
+    - cron: "*/10 * * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: avdbs-t22
+  cancel-in-progress: false
+
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install -r requirements.txt
-      - run: python -m playwright install --with-deps
-      - name: Restore state
-        uses: actions/cache@v4
+      - name: Checkout (full)
+        uses: actions/checkout@v4
         with:
-          path: state
-          key: avdbs-state-${{ github.run_id }}
-          restore-keys: avdbs-state-
-      - name: Ensure auth
-        env:
-          AVDBS_ID: ${{ secrets.AVDBS_ID }}
-          AVDBS_PW: ${{ secrets.AVDBS_PW }}
-          COOKIE_ENC_KEY: ${{ secrets.COOKIE_ENC_KEY }}
+          fetch-depth: 0
+
+      - name: Git identity
         run: |
-          python login_avdbs.py || true
-      - name: Crawl & send
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest (best-effort)
+        run: git pull --rebase || true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Telegram self-test
+        shell: bash
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          COOKIE_ENC_KEY: ${{ secrets.COOKIE_ENC_KEY }}
-          EXCLUDE_IMAGE_SUBSTRINGS: "icon_link.gif,loading_img.jpg"
-          PANIC_STOP: "0"
-        run: python main_avdbs.py
-      - name: Save state
-        uses: actions/upload-artifact@v4
-        with:
-          name: state
-          path: state
+        run: |
+          echo "== getMe =="
+          curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMe" || true
+          echo
+          echo "== sendMessage test =="
+          curl -s --get             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}"             --data-urlencode "text=✅ GitHub Actions → Telegram self-test (AVDBS t22)"             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || true
+          echo
+
+      - name: Run crawler
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          AVDBS_BASE: "https://www.avdbs.com"
+          AVDBS_BOARD_PATH: "/board/t22"
+          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}
+
+          ENABLE_HEARTBEAT: "1"
+          DOWNLOAD_AND_UPLOAD: "1"
+          TRACE_IMAGE_DEBUG: "0"
+          EXCLUDE_IMAGE_SUBSTRINGS: "/logo/,/banner/,/ads/,/noimage,/favicon,/thumb/,/placeholder/,/loading,.svg"
+
+          FORCE_SEND_LATEST: "0"
+          RESET_SEEN: "0"
+        run: python -u main.py
+
+      - name: Commit state if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add state/ || true
+            git commit -m "chore(state): update seen_ids [skip ci]" || true
+            git pull --rebase || true
+            git push || true
+          else:
+            echo "No state changes."
+          fi
