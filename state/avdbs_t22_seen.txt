@@ -105,3 +105,4 @@ avdbs:t22:/board/t22?page=175
 avdbs:t22:/board/1271224
 avdbs:t22:/board/1268496
 avdbs:t22:/board/1271198?reply=3555680
+avdbs:t22:/board/1271206?reply=3555728
