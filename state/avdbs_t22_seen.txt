@@ -96,3 +96,5 @@ avdbs:t22:/board/1270470?reply=3554810
 avdbs:t22:/board/1270774?reply=3554883
 avdbs:t22:/board/1270774?reply=3554949
 avdbs:t22:/board/1269221?reply=3555349
+avdbs:t22:/board/1271144
+avdbs:t22:/board/1270774
