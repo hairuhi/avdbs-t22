@@ -103,3 +103,4 @@ avdbs:t22:/board/1271198
 avdbs:t22:/board/1271144?reply=3555504
 avdbs:t22:/board/t22?page=175
 avdbs:t22:/board/1271224
+avdbs:t22:/board/1268496
