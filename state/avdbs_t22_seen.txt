@@ -114,3 +114,4 @@ avdbs:t22:/board/1271206?reply=3556216
 avdbs:t22:/board/1271198?reply=3556217
 avdbs:t22:/board/1268087
 avdbs:t22:/board/1271449?reply=3556544
+avdbs:t22:/board/1271206?reply=3556622
