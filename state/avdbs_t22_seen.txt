@@ -119,3 +119,5 @@ avdbs:t22:/board/1267488?reply=3556866
 avdbs:t22:/board/1271206?reply=3556920
 avdbs:t22:/board/1266892?reply=3556906
 avdbs:t22:/board/1263232?reply=3556929
+avdbs:t22:/board/1271449?reply=3556990
+avdbs:t22:/board/1270774?reply=3556991
