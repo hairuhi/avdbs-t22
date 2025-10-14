@@ -13,7 +13,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 AVDBS_BASE = os.getenv("AVDBS_BASE", "https://www.avdbs.com").rstrip("/")
 AVDBS_BOARD_PATH = os.getenv("AVDBS_BOARD_PATH", "/board/t22")
-LIST_URL = f"{AVDBS_BASE}{AVDBS_BOARD_PATH}"
+LIST_URL   = f"{AVDBS_BASE}{AVDBS_BOARD_PATH}"
 
 AVDBS_COOKIE = os.getenv("AVDBS_COOKIE", "").strip()
 AVDBS_ID = os.getenv("AVDBS_ID", "").strip()
@@ -26,7 +26,7 @@ FORCE_SEND_LATEST = os.getenv("FORCE_SEND_LATEST", "0").strip() == "1"
 RESET_SEEN = os.getenv("RESET_SEEN", "0").strip() == "1"
 
 DOWNLOAD_AND_UPLOAD = os.getenv("DOWNLOAD_AND_UPLOAD", "1").strip() == "1"
-TRACE_IMAGE_DEBUG = os.getenv("TRACE_IMAGE_DEBUG", "0").strip() == "1"
+TRACE_IMAGE_DEBUG   = os.getenv("TRACE_IMAGE_DEBUG", "0").strip() == "1"
 
 EXCLUDE_IMAGE_SUBSTRINGS = [
     "/logo/",
@@ -38,6 +38,14 @@ EXCLUDE_IMAGE_SUBSTRINGS = [
     "/placeholder/",
     "/loading",
     ".svg",
+    "/img/level/",
+    "mb3_",
+    "avdbs_logo",
+    "main-search",
+    "new_9x9w.png",
+    "/img/19cert/",
+    "19_cert",
+    "19_popup",
 ]
 _extra = os.getenv("EXCLUDE_IMAGE_SUBSTRINGS", "").strip()
 if _extra:
@@ -46,15 +54,17 @@ if _extra:
 SESSION = requests.Session()
 SESSION.headers.update(
     {
-        "User-Agent": "Mozilla/5.0 (compatible; AVDBS-t22Bot/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; AVDBS-t22Bot/6.0)",
         "Accept-Language": "ko,ko-KR;q=0.9,en;q=0.8",
         "Referer": AVDBS_BASE + "/",
+        "Connection": "close",
     }
 )
 TIMEOUT = 25
 
 def ensure_state_dir():
     pathlib.Path("state").mkdir(parents=True, exist_ok=True)
+
 
 def load_seen() -> set:
     ensure_state_dir()
@@ -68,6 +78,7 @@ def load_seen() -> set:
             s = {line.strip() for line in f if line.strip()}
     return s
 
+
 def append_seen(keys: list[str]):
     if not keys:
         return
@@ -76,10 +87,12 @@ def append_seen(keys: list[str]):
         for k in keys:
             f.write(k + "\n")
 
+
 def get_encoding_safe_text(resp: requests.Response) -> str:
     if not resp.encoding or resp.encoding.lower() in ("iso-8859-1", "ansi_x3.4-1968"):
         resp.encoding = resp.apparent_encoding or "utf-8"
     return resp.text
+
 
 def absolutize(base_url: str, url: str) -> str:
     if not url:
@@ -87,6 +100,7 @@ def absolutize(base_url: str, url: str) -> str:
     if url.startswith("//"):
         return "https:" + url
     return urljoin(base_url, url)
+
 
 def is_excluded_image(url: str) -> bool:
     low = url.lower()
@@ -102,10 +116,14 @@ def cookie_string_to_jar(raw: str) -> requests.cookies.RequestsCookieJar:
         jar.set(k.strip(), v.strip(), domain=urlparse(AVDBS_BASE).hostname)
     return jar
 
+
 def ensure_auth():
     if AVDBS_COOKIE:
         SESSION.cookies.update(cookie_string_to_jar(AVDBS_COOKIE))
         print("[auth] Using AVDBS_COOKIE (browser-exported cookies).")
+        ck = AVDBS_COOKIE.lower()
+        if "adult_chk=1" not in ck and "adult=ok" not in ck:
+            print("[warn] adult cookie not found in AVDBS_COOKIE (adult_chk=1 or adult=ok). You may see adult-cert placeholders.")
         return
     if AVDBS_ID and AVDBS_PW:
         print("[auth] AVDBS_ID/PW provided, but cookie-less login is site-specific; please prefer AVDBS_COOKIE.")
@@ -122,8 +140,10 @@ def tg_post(method: str, data: dict, files=None):
     print(f"[tg] {method} {r.status_code} ok={j.get('ok')} desc={j.get('description')}")
     return r, j
 
+
 def tg_send_text(text: str):
     return tg_post("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"})
+
 
 def build_caption(title: str, url: str, summary: str) -> str:
     cap = f"📌 <b>{title}</b>"
@@ -135,23 +155,25 @@ def build_caption(title: str, url: str, summary: str) -> str:
 def download_bytes(url: str, referer: str) -> bytes | None:
     try:
         headers = {"Referer": referer}
-        resp = SESSION.get(url, headers=headers, timeout=TIMEOUT)
+        resp = SESSION.get(url, headers=headers, timeout=25)
         if resp.status_code == 200 and resp.content:
             return resp.content
     except Exception as e:
         print(f"[warn] download failed: {url} err={e}")
     return None
 
+
 def send_photo_url_or_file(url: str, caption: str | None, referer: str):
-    if DOWNLOAD_AND_UPLOAD:
+    if os.getenv("DOWNLOAD_AND_UPLOAD", "1").strip() == "1":
         data = download_bytes(url, referer)
         if data:
             files = {"photo": ("image.jpg", BytesIO(data))}
             return tg_post("sendPhoto", {"chat_id": TELEGRAM_CHAT_ID, "caption": caption or "", "parse_mode": "HTML"}, files=files)
     return tg_post("sendPhoto", {"chat_id": TELEGRAM_CHAT_ID, "photo": url, "caption": caption or "", "parse_mode": "HTML"})
 
+
 def send_video_url_or_file(url: str, caption: str | None, referer: str):
-    if DOWNLOAD_AND_UPLOAD:
+    if os.getenv("DOWNLOAD_AND_UPLOAD", "1").strip() == "1":
         data = download_bytes(url, referer)
         if data:
             files = {"video": ("video.mp4", BytesIO(data))}
@@ -165,9 +187,10 @@ def summarize_text_from_html(soup: BeautifulSoup, max_chars=280) -> str:
     text = re.sub(r"\s+", " ", container.get_text(" ", strip=True)).strip()
     return (text[:max_chars-1] + "…") if len(text) > max_chars else text
 
+
 def parse_list() -> list[dict]:
     ensure_auth()
-    r = SESSION.get(LIST_URL, timeout=TIMEOUT)
+    r = SESSION.get(LIST_URL, timeout=25)
     html = get_encoding_safe_text(r)
     soup = BeautifulSoup(html, "html.parser")
 
@@ -195,7 +218,7 @@ def parse_list() -> list[dict]:
     return res
 
 def parse_post(url: str) -> dict:
-    r = SESSION.get(url, timeout=TIMEOUT)
+    r = SESSION.get(url, timeout=25)
     html = get_encoding_safe_text(r)
     soup = BeautifulSoup(html, "html.parser")
     summary = summarize_text_from_html(soup)
@@ -242,12 +265,12 @@ def parse_post(url: str) -> dict:
     videos = list(dict.fromkeys(videos))
     iframes = list(dict.fromkeys(iframes))
 
-    if TRACE_IMAGE_DEBUG:
+    if os.getenv("TRACE_IMAGE_DEBUG", "0").strip() == "1":
         print("[trace] images:", images[:10])
         print("[trace] videos:", videos[:5])
         try:
-            preview = "\n".join(images[:8]) or "(no images)"
-            tg_send_text("🔍 t22 image candidates:\n" + preview)
+            preview = "\\n".join(images[:8]) or "(no images)"
+            tg_send_text("🔍 t22 image candidates:\\n" + preview)
         except Exception:
             pass
 
@@ -284,7 +307,7 @@ def process():
     sent = []
     for p in to_send:
         title = p["title"]
-        url = p["url"]
+        url   = p["url"]
 
         content = parse_post(url)
         if content.get("title_override"):
@@ -303,13 +326,14 @@ def process():
             send_video_url_or_file(vid, None, url)
             time.sleep(1)
         if iframes:
-            tg_send_text("🎥 임베드:\n" + "\n".join(iframes[:5]))
+            tg_send_text("🎥 임베드:\\n" + "\\n".join(iframes[:5]))
             time.sleep(1)
 
         sent.append(p["_seen_key"])
 
     append_seen(sent)
     print(f"[info] appended {len(sent)} keys")
+
 
 if __name__ == "__main__":
     process()
