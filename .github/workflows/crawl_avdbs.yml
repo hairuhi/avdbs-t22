@@ -1,4 +1,4 @@
-name: AVDBS t22 Bot
+name: AVDBS t22 Bot (v6)
 
 on:
   schedule:
@@ -47,7 +47,7 @@ jobs:
           curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMe" || true
           echo
           echo "== sendMessage test =="
-          curl -s --get             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}"             --data-urlencode "text=✅ GitHub Actions → Telegram self-test (AVDBS t22)"             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || true
+          curl -s --get             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}"             --data-urlencode "text=✅ GitHub Actions → Telegram self-test (AVDBS t22 v6)"             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || true
           echo
 
       - name: Run crawler
@@ -62,7 +62,7 @@ jobs:
           ENABLE_HEARTBEAT: "1"
           DOWNLOAD_AND_UPLOAD: "1"
           TRACE_IMAGE_DEBUG: "0"
-          EXCLUDE_IMAGE_SUBSTRINGS: "/logo/,/banner/,/ads/,/noimage,/favicon,/thumb/,/placeholder/,/loading,.svg"
+          EXCLUDE_IMAGE_SUBSTRINGS: "/logo/,/banner/,/ads/,/noimage,/favicon,/thumb/,/placeholder/,/loading,.svg,/img/level/,mb3_,avdbs_logo,main-search,new_9x9w.png,/img/19cert/,19_cert,19_popup"
 
           FORCE_SEND_LATEST: "0"
           RESET_SEEN: "0"
@@ -75,6 +75,6 @@ jobs:
             git commit -m "chore(state): update seen_ids [skip ci]" || true
             git pull --rebase || true
             git push || true
-          else:
+          else
             echo "No state changes."
           fi
