@@ -124,3 +124,4 @@ avdbs:t22:/board/1270774?reply=3556991
 avdbs:t22:/board/1271449
 avdbs:t22:/board/1271206?reply=3557611
 avdbs:t22:/board/1271449?reply=3557749
+avdbs:t22:/board/1272090
