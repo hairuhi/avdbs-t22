@@ -127,3 +127,5 @@ avdbs:t22:/board/1271449?reply=3557749
 avdbs:t22:/board/1272090
 avdbs:t22:/board/1272090?reply=3557916
 avdbs:t22:/board/1271198?reply=3558009
+avdbs:t22:/board/1272163?reply=3558050
+avdbs:t22:/board/1272090?reply=3558052
