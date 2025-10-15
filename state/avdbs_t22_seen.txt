@@ -133,3 +133,4 @@ avdbs:t22:/board/1269221?reply=3558104
 avdbs:t22:/board/1272163?reply=3558201
 avdbs:t22:/board/1272090?reply=3558202
 avdbs:t22:/board/1269221?reply=3558400
+avdbs:t22:/board/1268087?reply=3558525
