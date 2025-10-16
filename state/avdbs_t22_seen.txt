@@ -151,3 +151,4 @@ avdbs:t22:/board/1272765?reply=3559391
 avdbs:t22:/board/1272775?reply=3559423
 avdbs:t22:/board/1272765?reply=3559419
 avdbs:t22:/board/1272765?reply=3559483
+avdbs:t22:/board/1271206?reply=3559595
