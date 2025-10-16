@@ -134,4 +134,178 @@ def download_bytes(url: str, referer: str) -> bytes | None:
     return None
 
 def tg_post(method: str, data: dict, files=None):
-    r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}", data=data, files=
+    r = requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/{method}", data=data, files=files, timeout=60)
+    try:
+        ok = r.json().get("ok", None)
+    except Exception:
+        ok = None
+    print(f"[tg] {method} {r.status_code} ok={ok}")
+    return r
+
+def tg_send_text(text: str):
+    return tg_post("sendMessage", {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,  # 카드프리뷰 차단
+    })
+
+def send_photo_file(bytes_data: bytes, caption: str | None):
+    return tg_post("sendPhoto",
+                   {"chat_id": TELEGRAM_CHAT_ID, "caption": caption or "", "parse_mode": "HTML"},
+                   files={"photo": ("image.jpg", BytesIO(bytes_data))})
+
+# ===== Gate detection & container pick =====
+def is_login_gate(resp, soup) -> bool:
+    final_url = getattr(resp, "url", "") or ""
+    title_txt = (soup.title.string.strip() if soup.title and soup.title.string else "")
+    big_text = soup.get_text(" ", strip=True)[:2000]
+    if "/login" in final_url:
+        return True
+    if "AVDBS" in title_txt and "로그인" in title_txt:
+        return True
+    if soup.find("input", {"name": "mb_id"}) and soup.find("input", {"name": "mb_password"}):
+        return True
+    if ("성인 인증" in big_text) and ("로그인" in big_text):
+        return True
+    return False
+
+def pick_main_container(soup: BeautifulSoup):
+    cands = [
+        "#bo_v_con", ".bo_v_con", "#view_content", ".viewContent",
+        ".board_view", ".board-view", ".view-wrap", ".content-body",
+        "article",
+    ]
+    for sel in cands:
+        node = soup.select_one(sel)
+        if node:
+            return node
+    return soup
+
+def summarize_text(node, max_chars=200) -> str:
+    for t in node(["script", "style", "noscript"]): t.extract()
+    txt = re.sub(r"\s+", " ", node.get_text(" ", strip=True))
+    return (txt[:max_chars] + "…") if len(txt) > max_chars else txt
+
+# ===== Parse =====
+def parse_list() -> list[dict]:
+    r = SESSION.get(LIST_URL, timeout=TIMEOUT)
+    r.encoding = r.apparent_encoding or "utf-8"
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    posts = {}
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if "/board/" not in href:
+            continue
+        full = absolutize(LIST_URL, href)
+        full = canon_url_remove_noise(full)
+        # 같은 URL이 여러 텍스트로 반복될 수 있으니 긴 제목을 우선
+        title = a.get_text(strip=True) or "(제목 없음)"
+        if full not in posts or len(title) > len(posts[full]["title"]):
+            posts[full] = {"url": full, "title": title}
+    res = list(posts.values())
+    # 최신이 위에 오는 경향 → 문자열 역순 정렬로 준정렬
+    res.sort(key=lambda x: x["url"], reverse=True)
+    print(f"[debug] list collected: {len(res)} items")
+    return res
+
+def parse_post(url: str):
+    resp = SESSION.get(url, timeout=TIMEOUT)
+    resp.encoding = resp.apparent_encoding or "utf-8"
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    if is_login_gate(resp, soup):
+        print(f"[warn] login/adult gate detected, skip: {url}")
+        return None  # 완전 스킵 (캡션도 안보냄)
+
+    container = pick_main_container(soup)
+    summary = summarize_text(container)
+    title = soup.title.string.strip() if soup.title and soup.title.string else "(제목 없음)"
+
+    images = []
+    for img in container.find_all("img"):
+        src = img.get("src") or img.get("data-src") or img.get("data-original") or img.get("data-echo")
+        if not src:
+            continue
+        full = absolutize(url, src)
+        if is_content_image(full):
+            images.append(full)
+
+    if not images:
+        for a in container.find_all("a", href=True):
+            h = a["href"].strip()
+            if re.search(r"\.(jpg|jpeg|png|gif|webp)(?:\?|$)", h, re.I):
+                full = absolutize(url, h)
+                if is_content_image(full):
+                    images.append(full)
+
+    images = list(dict.fromkeys(images))
+    if TRACE_IMAGE_DEBUG:
+        print("[trace] images(after whitelist):", images[:10])
+        try:
+            tg_send_text("🔍 candidates:\n" + "\n".join(images[:10] or ["(no images)"]))
+        except Exception:
+            pass
+
+    return {"title": title, "summary": summary, "images": images}
+
+# ===== Main =====
+def process():
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        raise RuntimeError("TELEGRAM_TOKEN / TELEGRAM_CHAT_ID required")
+
+    posts = parse_list()
+    if not posts:
+        print("[info] no posts found")
+        return
+
+    seen = load_seen()
+    to_send = []
+    for p in posts:
+        key = f"avdbs:t22:{p['url']}"
+        if key not in seen:
+            d = dict(p)
+            d["_seen_key"] = key
+            to_send.append(d)
+
+    if FORCE_SEND_LATEST and not to_send and posts:
+        latest = dict(posts[0])
+        latest["_seen_key"] = f"avdbs:t22:{latest['url']}"
+        to_send = [latest]
+        print("[debug] FORCE_SEND_LATEST=1 → sending most recent once")
+
+    if not to_send:
+        print("[info] no new posts to send")
+        return
+
+    sent_keys = []
+    for p in to_send:
+        url = p["url"]
+        data = parse_post(url)
+        if data is None:
+            # 게이트면 전체 스킵 (seen에도 안 찍음 → 쿠키 정상이면 다음에 다시 시도)
+            continue
+
+        title = data["title"]
+        summary = data["summary"]
+        images = data["images"]
+
+        tg_send_text(f"📌 <b>{title}</b>\n{summary}\n{url}")
+        time.sleep(1)
+
+        for img in images[:10]:
+            blob = download_bytes(img, url)
+            if blob:
+                send_photo_file(blob, None)
+                time.sleep(1)
+            else:
+                print(f"[warn] skip image due to download failure: {img}")
+
+        sent_keys.append(p["_seen_key"])
+
+    append_seen(sent_keys)
+    print(f"[info] appended {len(sent_keys)} keys")
+
+if __name__ == "__main__":
+    process()
