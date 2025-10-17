@@ -215,3 +215,4 @@ avdbs:t22:https://www.avdbs.com/board/1247684
 avdbs:t22:https://www.avdbs.com/board/951102
 avdbs:t22:https://www.avdbs.com/board/1273809
 avdbs:t22:https://www.avdbs.com/board/1269611
+avdbs:t22:https://www.avdbs.com/board/773616
