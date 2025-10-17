@@ -210,3 +210,5 @@ avdbs:t22:https://www.avdbs.com/board/1230999
 avdbs:t22:https://www.avdbs.com/board/1229671
 avdbs:t22:https://www.avdbs.com/board/1151333
 avdbs:t22:https://www.avdbs.com/board/1040690
+avdbs:t22:https://www.avdbs.com/board/1272546
+avdbs:t22:https://www.avdbs.com/board/1247684
