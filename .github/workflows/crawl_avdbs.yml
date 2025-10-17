@@ -1,26 +1,73 @@
-name: AVDBS t22 Bot (v6.1)
+name: AVDBS t22 Bot (v7.0)
+
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "*/10 * * * *"   # 10분마다 실행
+  workflow_dispatch:         # 수동 실행 허용
+
+permissions:
+  contents: write            # state 파일 푸시를 위해 필요
+
+concurrency:
+  group: avdbs-t22
+  cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt
-      - name: Run bot
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+
+      # 선택: 텔레그램 봇이 유효한지 간단 점검
+      - name: Telegram self-test
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}
-        run: python -u main.py
+        run: |
+          echo "== getMe =="
+          curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/getMe" || true
+          echo
+          echo "== sendMessage test =="
+          curl -s --get \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=✅ GitHub Actions → Telegram self-test (AVDBS t22 v7.0)" \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || true
+          echo
 
-- name: Commit state if changed
+      - name: Run crawler
+        env:
+          # --- Telegram ---
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          # --- Target / Auth ---
+          AVDBS_BASE: "https://www.avdbs.com"
+          AVDBS_BOARD_PATH: "/board/t22"
+          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}   # document.cookie로 만든 한 줄 문자열
+
+          # --- Options (테스트 때만 1로 바꾸고 정상 운용 시 0으로 되돌리세요) ---
+          FORCE_SEND_LATEST: "0"     # 새 글이 없어도 최신 글 1건 강제 전송
+          RESET_SEEN: "0"            # 중복 방지 상태 무시(초기화) 후 1회 실행
+          TRACE_IMAGE_DEBUG: "0"     # 이미지 후보 로그/메시지 출력
+
+        run: |
+          python -u main.py
+
+      - name: Commit state if changed
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name  "github-actions[bot]"
