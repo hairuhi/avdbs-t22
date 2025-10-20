@@ -228,3 +228,4 @@ avdbs:t22:https://www.avdbs.com/board/1274624
 avdbs:t22:https://www.avdbs.com/board/1271144
 avdbs:t22:https://www.avdbs.com/board/1275407
 avdbs:t22:https://www.avdbs.com/board/1275572
+avdbs:t22:https://www.avdbs.com/board/1242981
