@@ -33,7 +33,7 @@ EXCLUDE_IMAGE_SUBSTRINGS = [
 ALLOWED_IMG_DOMAINS = {"avdbs.com", "www.avdbs.com", "i1.avdbs.com"}
 CONTENT_PATH_ALLOW_RE = re.compile(r"/(data|upload|board|files?|attach)/", re.I)
 
-# 보일러플레이트 문구 제거(캡션 요약에서 삭제)
+# 보일러 문구 제거(요약 정제)
 BOILERPLATE_RE = re.compile(
     r"(로그아웃|마이페이지|모바일앱|연예정보|배우\s*순위|품번\s*검색|한줄평/추천|질문답변\s*커뮤니티|인기\s*게시글\s*전체\s*게시글)",
     re.I
@@ -42,9 +42,8 @@ BOILERPLATE_RE = re.compile(
 # ===== HTTP =====
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (compatible; AVDBS-t22Bot/7.7)",
+    "User-Agent": "Mozilla/5.0 (compatible; AVDBS-t22Bot/7.8)",
     "Accept-Language": "ko,en;q=0.8",
-    "Referer": AVDBS_BASE + "/",
     "Connection": "close",
 })
 
@@ -83,11 +82,14 @@ def cookie_string_to_jar(raw: str) -> requests.cookies.RequestsCookieJar:
             jar.set(k, v, domain=dom)
     return jar
 
-if AVDBS_COOKIE:
-    SESSION.cookies.update(cookie_string_to_jar(AVDBS_COOKIE))
-    ck = AVDBS_COOKIE.lower()
-    if "adult_chk=1" not in ck and "adult=ok" not in ck:
-        print("[warn] adult cookie not found → placeholders may appear")
+def apply_cookies():
+    if AVDBS_COOKIE:
+        SESSION.cookies.update(cookie_string_to_jar(AVDBS_COOKIE))
+        ck = AVDBS_COOKIE.lower()
+        if "adult_chk=1" not in ck and "adult=ok" not in ck:
+            print("[warn] adult cookie not found → placeholders/login may appear")
+    else:
+        print("[warn] AVDBS_COOKIE not provided")
 
 # ===== URL canonicalization & filters =====
 def canon_url_remove_noise(u: str) -> str:
@@ -135,7 +137,10 @@ def is_content_image(url: str) -> bool:
 
 def download_bytes(url: str, referer: str) -> bytes | None:
     try:
-        headers = {"Referer": referer, "Accept": "image/avif,image/webp,image/*,*/*;q=0.8"}
+        headers = {
+            "Referer": referer,  # 글 URL
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+        }
         r = SESSION.get(url, headers=headers, timeout=TIMEOUT)
         if r.status_code == 200 and r.content: return r.content
         print(f"[warn] download {r.status_code}: {url}")
@@ -175,14 +180,12 @@ def is_login_gate(resp, soup) -> bool:
     return False
 
 def pick_main_container(soup: BeautifulSoup):
-    # 후보 우선순위
     for sel in ["#bo_v_con", "#view_content", ".view_content", ".board_view", "article"]:
         node = soup.select_one(sel)
         if node: return node
     return soup
 
 def strip_layout(node: BeautifulSoup):
-    # 본문 내부에서도 레이아웃/네비/버튼/댓글 요소 제거
     kill_selectors = [
         "header","nav","footer",".gnb",".snb",".side",".sidebar",".category",".tags",".tag",".btn",".btns",
         ".bo_v_nb",".bo_v_com",".bo_v_sns",".comment",".reply",".writer-info",".meta",".tool",".share"
@@ -195,14 +198,28 @@ def summarize_text(node, max_chars=220) -> str:
     strip_layout(node)
     for t in node(["script","style","noscript"]): t.extract()
     text = re.sub(r"\s+", " ", node.get_text(" ", strip=True))
-    text = BOILERPLATE_RE.sub(" ", text)  # 보일러 제거
+    text = BOILERPLATE_RE.sub(" ", text)
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) > max_chars: text = text[:max_chars] + "…"
     return text
 
+# ===== Preflight: cookie really works? =====
+def preflight_auth() -> bool:
+    r = SESSION.get(LIST_URL, timeout=TIMEOUT, headers={"Referer": AVDBS_BASE + "/"})
+    r.encoding = r.apparent_encoding or "utf-8"
+    head = r.text[:4000]
+    if ("로그인" in head and "AVDBS" in head) or ("성인 인증" in head):
+        print("[fatal] cookie invalid or expired → login/adult gate detected")
+        try:
+            tg_send_text("⚠️ AVDBS 쿠키가 만료/미적용 같습니다. `AVDBS_COOKIE`를 새로 갱신해 주세요.")
+        except Exception:
+            pass
+        return False
+    return True
+
 # ===== Parsing =====
 def parse_list() -> list[dict]:
-    r = SESSION.get(LIST_URL, timeout=TIMEOUT)
+    r = SESSION.get(LIST_URL, timeout=TIMEOUT, headers={"Referer": AVDBS_BASE + "/"})
     r.encoding = r.apparent_encoding or "utf-8"
     soup = BeautifulSoup(r.text, "html.parser")
 
@@ -221,7 +238,7 @@ def parse_list() -> list[dict]:
     return res
 
 def parse_post(url: str):
-    resp = SESSION.get(url, timeout=TIMEOUT)
+    resp = SESSION.get(url, timeout=TIMEOUT, headers={"Referer": url})
     resp.encoding = resp.apparent_encoding or "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -249,8 +266,7 @@ def parse_post(url: str):
 
     images = list(dict.fromkeys(images))
 
-    # 본문 품질 체크: 요약이 너무 짧고 이미지 0 → 스킵
-    if len(summary) < 60 and not images:
+    if len(summary) < 60 and not images:  # 품질 체크
         print(f"[warn] weak content (short text & no images), skip: {url}")
         return None
 
@@ -266,11 +282,14 @@ def process():
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         raise RuntimeError("TELEGRAM_TOKEN / TELEGRAM_CHAT_ID required")
 
+    apply_cookies()
+    if not preflight_auth():   # 인증/성인 통과 확인
+        return
+
     posts = parse_list()
     if not posts:
         print("[info] no posts found"); return
 
-    # seen
     seen = load_seen()
     to_send = []
     for p in posts:
