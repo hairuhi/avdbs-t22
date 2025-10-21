@@ -1,12 +1,12 @@
-name: AVDBS t22 Bot (v7.0)
+name: AVDBS t22 Bot (v7.8)
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # 10분마다 실행
-  workflow_dispatch:         # 수동 실행 허용
+    - cron: "*/10 * * * *"     # 10분마다
+  workflow_dispatch:           # 수동 실행
 
 permissions:
-  contents: write            # state 파일 푸시를 위해 필요
+  contents: write              # state 파일 푸시 필요
 
 concurrency:
   group: avdbs-t22
@@ -31,7 +31,7 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # 선택: 텔레그램 봇이 유효한지 간단 점검
+      # --- (선택) 수동 실행 시 텔레그램 봇 자체 점검 ---
       - name: Telegram self-test
         if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
@@ -44,26 +44,31 @@ jobs:
           echo "== sendMessage test =="
           curl -s --get \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=✅ GitHub Actions → Telegram self-test (AVDBS t22 v7.0)" \
+            --data-urlencode "text=✅ Telegram self-test (AVDBS t22 v7.8)" \
             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" || true
           echo
 
+      # --- (강추) 쿠키 프리플라이트: 바로 인증 통과 여부 확인 ---
+      - name: AVDBS cookie self-test
+        env:
+          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}
+        run: |
+          echo "== /board/t22 with cookie =="
+          curl -s -H "Cookie: ${AVDBS_COOKIE}" https://www.avdbs.com/board/t22 | head -n 60
+
       - name: Run crawler
         env:
-          # --- Telegram ---
+          # Telegram
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-          # --- Target / Auth ---
+          # Target/Auth
           AVDBS_BASE: "https://www.avdbs.com"
           AVDBS_BOARD_PATH: "/board/t22"
-          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}   # document.cookie로 만든 한 줄 문자열
-
-          # --- Options (테스트 때만 1로 바꾸고 정상 운용 시 0으로 되돌리세요) ---
-          FORCE_SEND_LATEST: "0"     # 새 글이 없어도 최신 글 1건 강제 전송
-          RESET_SEEN: "0"            # 중복 방지 상태 무시(초기화) 후 1회 실행
-          TRACE_IMAGE_DEBUG: "0"     # 이미지 후보 로그/메시지 출력
-
+          AVDBS_COOKIE: ${{ secrets.AVDBS_COOKIE }}   # document.cookie 한 줄( adult_chk=1 포함 )
+          # Options (테스트시에만 1로)
+          FORCE_SEND_LATEST: "0"
+          RESET_SEEN: "0"
+          TRACE_IMAGE_DEBUG: "0"
         run: |
           python -u main.py
 
